@@ -6,17 +6,26 @@ require 'active_support'
 require 'slim'
 require 'pp'
 
+Dir["#{__dir__}/initializers/**/*.rb"].each(&method(:require))
 Dir["#{__dir__}/app/**/*.rb"].each(&method(:require))
 
 set :views, "#{__dir__}/app/views/"
-enable :session
+enable :sessions
 
-before do
-  pp UserSession.find
+before '/room' do
+  redirect '/in' unless !!UserSession.find
+end
+
+before '/in' do
+  redirect '/room' if !!UserSession.find
+end
+
+after do
+  ActiveRecord::Base.connection.close
 end
 
 get '/' do
-  'Hello world!'
+  slim :index
 end
 
 get '/users/new' do
@@ -42,8 +51,8 @@ end
 post '/in' do
   begin
     UserSession.create!(in_params)
-    @in = UserSession.new
-    slim :user_in
+    #persist_session(UserSession.create!(in_params))
+    redirect '/room'
   rescue Authlogic::Session::Existence::SessionInvalidError => e
     @in = e.record
     slim :user_in
@@ -51,29 +60,44 @@ post '/in' do
 end
 
 post '/out' do
-  #destroy
+  UserSession.find.try(:destroy)
+  #clear_session(UserSession.find)
+  redirect '/'
 end
 
-def normal_params
-  @normalized ||= pp params.deep_symbolize_keys!
+get '/room' do
+  @user = current_user
+  slim :room
+end
+
+private
+
+def current_user
+  UserSession.find.try(:user)
+end
+
+#sessionを使用しない場合
+#initializers/authlogic_sinatra_adapterのコメントアウトを外してこれを使う
+def persist_session(authlogic_session)
+  cookies[authlogic_session.for_cookie[:key]] = authlogic_session.for_cookie[:value]
+end
+
+#sessionを使用しない場合
+#initializers/authlogic_sinatra_adapterのコメントアウトを外してこれを使う
+def clear_session(authlogic_session)
+  return unless authlogic_session
+  cookies[authlogic_session.for_cookie[:key]] = nil
+end
+
+def symbolize_params
+  @normalized ||= params.deep_symbolize_keys!
 end
 
 def user_params
-  normal_params.slice(:login, :email, :password)
+  symbolize_params.slice(:login, :email, :password)
 end
 
 def in_params
-  normal_params.slice(:login, :password)
+  symbolize_params.slice(:login, :password)
 end
 
-module Authlogic
-  module ControllerAdapters
-    module SinatraAdapter
-      class Adapter < AbstractAdapter
-        def session
-          request.session
-        end
-      end
-    end
-  end
-end

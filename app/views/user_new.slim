@@ -1,17 +1,19 @@
+h1 アカウント作成
 -if @user.errors.full_messages.present?
   ul
     - @user.errors.full_messages.each do |message|
       li= message
 
 form(method=:post)
-  h1 ID
+  h2 ID
   div
     input(type='text' name='login' value=@user.login)
-  h1 email
+  h2 email
   div
     input(type='text' name='email' value=@user.email)
-  h1 Password
+  h2 Password
   div
     input(type='password' name='password' value=@user.password)
   div
+    br
     input(type='submit' value='登録')
